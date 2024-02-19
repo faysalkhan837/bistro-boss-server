@@ -33,12 +33,19 @@ async function run() {
 
    // Middle ware:
    const verifyToken = (req, res, next) =>{
-    console.log('inside verify token', req.headers);
+    console.log('inside verify token', req.headers.authorization);
     if(!req.headers.authorization){
       return res.status(401).send({message:'forbiden access'})
     }
-    const token = req.headers.authorization.split(' ')[1]
-    next();
+    const token = req.headers.authorization.split(' ')[1];
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET,(err, decoded) =>{
+      if(err){
+        return res.status(401).send({message: 'forbiden access'})
+      }
+      req.decode = decoded;
+      next();
+    })
+    
   }
     // JWT related api:
     app.post('/jwt', async (req, res) => {
