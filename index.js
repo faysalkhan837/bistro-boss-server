@@ -31,9 +31,17 @@ async function run() {
     const reviewCullection = client.db("bistroDB").collection("reviews");
     const cartCullection = client.db("bistroDB").collection("carts");
 
+
+       // JWT related api:
+       app.post('/jwt', async (req, res) => {
+        const user = req.body;
+        const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1hr' })
+        res.send({ token })
+      })
+
     // Middle ware:
     const verifyToken = (req, res, next) => {
-      console.log('inside verify token', req.headers.authorization);
+      // console.log('inside verify token', req.headers.authorization);
       if (!req.headers.authorization) {
         return res.status(401).send({ message: 'forbiden access' })
       }
@@ -47,21 +55,26 @@ async function run() {
       })
 
     }
-    // JWT related api:
-    app.post('/jwt', async (req, res) => {
-      const user = req.body;
-      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1hr' })
-      res.send({ token })
-    })
+    // use verify admin after verifyToken
+    const verifyAdmin = async(req, res, next) =>{
+      const email = req.decoded.email;
+      const query = {email : email};
+      const user = await userCollection.findOne(query);
+      const isAdmin = user?.role === 'admin';
+      if(!isAdmin){
+        return res.status(403).send({message: 'forbiden access'})
+      }
+      next();
+    }
 
 
     // Users related api:
-    app.get('/users', verifyToken, async (req, res) => {
+    app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
       console.log(req.headers);
       const result = await userCollection.find().toArray();
       res.send(result);
     })
-    app.get('/users/admin/:email',verifyToken, async (req, res) => {
+    app.get('/users/admin/:email',verifyToken,  async (req, res) => {
       const email = req.params.email;
       if (email !== req.decoded.email) {
         return res.status(403).send({ message: 'unauthorized access' })
@@ -87,12 +100,8 @@ async function run() {
       const result = await userCollection.insertOne(user);
       res.send(result);
     })
-    app.get('/users',verifyToken, async (req, res) => {
-      // console.log(req.headers);
-      const result = await userCollection.find().toArray();
-      res.send(result);
-    })
-    app.patch('/users/admin/:id', async (req, res) => {
+   
+    app.patch('/users/admin/:id', verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
       const updateDoc = {
@@ -103,7 +112,7 @@ async function run() {
       const result = await userCollection.updateOne(filter, updateDoc);
       res.send(result);
     })
-    app.delete('/users/:id', async (req, res) => {
+    app.delete('/users/:id', verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await userCollection.deleteOne(query);
