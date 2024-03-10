@@ -3,13 +3,13 @@ const app = express();
 const cors = require('cors');
 const port = process.env.PORT || 5000;
 const jwt = require('jsonwebtoken');
+const stripe = require("stripe")('sk_test_51OpWE5RtsxE2us5McjhPpF1j01U36qmrD4kDwMg2MYnKIPcKqZPwUSxFLXYbWo31BS4Hr6BdC5rE1eHpbwoTx29v00aq4UNI0R');
 require('dotenv').config()
 
 app.use(cors())
 app.use(express.json())
 
-
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { MongoClient, ServerApiVersion,ObjectId} = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.kg7cyoc.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -30,6 +30,7 @@ async function run() {
     const userCollection = client.db("bistroDB").collection("users");
     const reviewCullection = client.db("bistroDB").collection("reviews");
     const cartCullection = client.db("bistroDB").collection("carts");
+    const paymentCullection = client.db("bistroDB").collection("payments");
 
 
     // JWT related api:
@@ -125,11 +126,11 @@ async function run() {
       const result = await cursor.toArray();
       res.send(result);
     })
-    
+
     app.get('/menu/:id', async (req, res) => {
       const id = req.params.id;
       console.log(id)
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: id };
       const result = await menuCollection.findOne(query);
       res.send(result);
     })
@@ -139,12 +140,12 @@ async function run() {
       const result = await menuCollection.insertOne(item);
       res.send(result);
     })
-    app.patch('/menu/:id', async(req, res) =>{
+    app.patch('/menu/:id', async (req, res) => {
       const item = req.body;
       const id = req.params.id;
-      const filter = {_id: new ObjectId(id)};
+      const filter = { _id: id };
       const updatedDoc = {
-        $set:{
+        $set: {
           name: item.name,
           category: item.category,
           price: item.price,
@@ -162,7 +163,7 @@ async function run() {
       const result = await menuCollection.deleteOne(query);
       res.send(result);
     })
-    
+
     app.get('/reviews', async (req, res) => {
       const cursor = reviewCullection.find();
       const result = await cursor.toArray();
@@ -184,6 +185,40 @@ async function run() {
       const query = { _id: new ObjectId(id) };
       const result = await cartCullection.deleteOne(query);
       res.send(result);
+    })
+    // Payment intent
+    app.post('/create-payment-intent', async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
+      console.log(amount)
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types: ['card']
+      })
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      })
+    })
+    app.get('/payments/:email',verifyToken, async (req, res) =>{
+      const query = {email: req.params.email};
+      if(req.params.email !== req.decoded.email){
+        return res.status(403).send({message: 'forbidden access'})
+      }
+      const result = await paymentCullection.find(query).toArray();
+      res.send(result);
+    })
+    app.post('/payments', async (req, res) =>{
+      const payment = req.body;
+      const paymentResult = await paymentCullection.insertOne(payment);
+      // Carefully dellet all item from the cart.
+      // New method for dellet multiple items.
+      console.log('payment info', payment);
+      const query = {_id: {
+        $in: payment.cartIds.map(id => new ObjectId(id))
+      }}
+      const deleteResult = await cartCullection.deleteMany(query);
+      res.send({paymentResult, deleteResult});
     })
 
     await client.db("admin").command({ ping: 1 });
