@@ -3,7 +3,7 @@ const app = express();
 const cors = require('cors');
 const port = process.env.PORT || 5000;
 const jwt = require('jsonwebtoken');
-const stripe = require("stripe")('sk_test_51OpWE5RtsxE2us5McjhPpF1j01U36qmrD4kDwMg2MYnKIPcKqZPwUSxFLXYbWo31BS4Hr6BdC5rE1eHpbwoTx29v00aq4UNI0R');
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 require('dotenv').config()
 
 app.use(cors())
